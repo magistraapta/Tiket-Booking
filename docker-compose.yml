@@ -1,0 +1,99 @@
+networks:
+  traefik-network:
+    driver: bridge
+
+services:
+  event-service:
+    build: ./event-service
+    container_name: event-service
+    ports:
+      - 8084:8084
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.event.rule=PathPrefix(`/events`)"
+      - "traefik.http.services.event.loadbalancer.server.port=8084"
+    environment:
+      - PORT=8084
+      - INVENTORY_SERVICE_URL=http://inventory-service:8082
+    networks:
+      - traefik-network
+
+  inventory-service:
+    build: ./inventory-service
+    container_name: inventory-service
+    ports:
+      - 8082:8082
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.inventory.rule=PathPrefix(`/inventory`)"
+      - "traefik.http.services.inventory.loadbalancer.server.port=8082"
+    environment:
+      - PORT=8082
+      - EVENT_SERVICE_URL=http://event-service:8084
+    networks:
+      - traefik-network
+
+  booking-service:
+    build: ./booking-service
+    container_name: booking-service
+    ports:
+      - 8081:8081
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.booking.rule=PathPrefix(`/bookings`)"
+      - "traefik.http.services.booking.loadbalancer.server.port=8081"
+    environment:
+      - PORT=8081
+      - EVENT_SERVICE_URL=http://event-service:8084
+      - INVENTORY_SERVICE_URL=http://inventory-service:8082
+    networks:
+      - traefik-network
+
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    ports:
+      - 8083:8083
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.user.rule=PathPrefix(`/users`)"
+      - "traefik.http.services.user.loadbalancer.server.port=8083"
+    environment:
+      - PORT=8083
+    networks:
+      - traefik-network
+
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=traefik-network"
+      - "--entrypoints.web.address=:80"
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--api.debug=true"
+      - "--log.level=DEBUG"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.localhost`) || PathPrefix(`/api`) || PathPrefix(`/dashboard`)"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.entrypoints=web"
+    ports:
+      - 80:80
+      - 8080:8080
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - traefik-network
+
+  whoami:
+    image: traefik/whoami
+    container_name: whoami
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=PathPrefix(`/whoami`)"
+      - "traefik.http.services.whoami.loadbalancer.server.port=80"
+    networks:
+      - traefik-network
